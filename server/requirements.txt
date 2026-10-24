@@ -1,0 +1,8 @@
+accelerate>=0.30
+fastapi>=0.110,<1
+numpy>=1.26
+python-multipart>=0.0.9
+soundfile>=0.12
+torch>=2.2
+transformers>=4.30,<5
+uvicorn[standard]>=0.27,<1

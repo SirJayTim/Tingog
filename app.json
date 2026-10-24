@@ -1,25 +1,42 @@
 {
   "expo": {
-    "name": "tingog",
+    "name": "Tingog",
     "slug": "tingog",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.translate.tingog",
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "Tingog needs speech recognition to write the transcript.",
+        "NSMicrophoneUsageDescription": "Tingog needs the microphone to hear the lecture."
+      }
     },
     "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
-      },
-      "predictiveBackGestureEnabled": false
+      "package": "com.translate.tingog",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    }
+    "plugins": [
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Tingog needs the microphone to hear the lecture.",
+          "speechRecognitionPermission": "Tingog needs speech recognition to write the transcript.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
+      ],
+      "expo-document-picker"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "ba8bf801-7536-4ee7-b396-524875928ece"
+      }
+    },
+    "owner": "centinel_cen"
   }
 }
