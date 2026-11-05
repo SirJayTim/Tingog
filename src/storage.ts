@@ -13,6 +13,7 @@ export type Lecture = {
 const LECTURES_KEY = "tingog:lectures:v1";
 const LANG_KEY = "tingog:lang:v1";
 const NIGHT_MODE_KEY = "tingog:night-mode:v1";
+const API_URL_KEY = "tingog:api-url:v1";
 
 export function newId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -50,7 +51,7 @@ export async function deleteLecture(id: string): Promise<void> {
 }
 
 export async function loadLang(): Promise<string> {
-  return (await AsyncStorage.getItem(LANG_KEY)) || "fil-PH";
+  return (await AsyncStorage.getItem(LANG_KEY)) || "mix";
 }
 
 export async function saveLang(lang: string): Promise<void> {
@@ -63,4 +64,12 @@ export async function loadNightMode(): Promise<boolean> {
 
 export async function saveNightMode(enabled: boolean): Promise<void> {
   await AsyncStorage.setItem(NIGHT_MODE_KEY, enabled ? "true" : "false");
+}
+
+export async function loadApiUrl(): Promise<string> {
+  return ((await AsyncStorage.getItem(API_URL_KEY)) || "").trim();
+}
+
+export async function saveApiUrl(url: string): Promise<void> {
+  await AsyncStorage.setItem(API_URL_KEY, url.trim());
 }

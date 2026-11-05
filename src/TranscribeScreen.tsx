@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,8 +12,11 @@ import {
 import { getDocumentAsync, type DocumentPickerAsset } from "./documentPicker";
 import { newId, upsertLecture } from "./storage";
 import {
+  DEFAULT_TRANSCRIPTION_API_URL,
   TRANSCRIPTION_LANGUAGES,
   TranscriptionLanguage,
+  getTranscriptionApiUrl,
+  setTranscriptionApiUrl,
   transcribeAudio,
 } from "./transcription";
 import { getTheme, type ThemeColors } from "./theme";
@@ -41,10 +44,32 @@ export default function TranscribeScreen({
     [isNightMode]
   );
   const [asset, setAsset] = useState<DocumentPickerAsset>();
-  const [language, setLanguage] = useState<TranscriptionLanguage>("hil");
+  const [language, setLanguage] = useState<TranscriptionLanguage>("mix");
   const [title, setTitle] = useState("");
+  const [apiUrl, setApiUrl] = useState(DEFAULT_TRANSCRIPTION_API_URL);
+  const [serverModalOpen, setServerModalOpen] = useState(false);
+  const [draftApiUrl, setDraftApiUrl] = useState(DEFAULT_TRANSCRIPTION_API_URL);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    getTranscriptionApiUrl().then(setApiUrl);
+  }, []);
+
+  const openServerModal = () => {
+    setDraftApiUrl(apiUrl);
+    setServerModalOpen(true);
+  };
+
+  const saveServerUrl = async () => {
+    try {
+      const normalized = await setTranscriptionApiUrl(draftApiUrl);
+      setApiUrl(normalized);
+      setServerModalOpen(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save the server URL.");
+    }
+  };
 
   const chooseFile = async () => {
     setError("");
@@ -62,7 +87,9 @@ export default function TranscribeScreen({
         return;
       }
       setAsset(selected);
-      setTitle((current) => current || selected.name.replace(/\.[^.]+$/, ""));
+      setTitle((current) =>
+        current.trim() ? current : selected.name.replace(/\.[^.]+$/, "")
+      );
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "Could not open the audio picker."
@@ -78,6 +105,7 @@ export default function TranscribeScreen({
     setBusy(true);
     setError("");
     try {
+      await setTranscriptionApiUrl(apiUrl);
       const result = await transcribeAudio(asset, language);
       const now = Date.now();
       const id = newId();
@@ -99,13 +127,7 @@ export default function TranscribeScreen({
   };
 
   const cancel = () => {
-    if (busy) {
-      Alert.alert(
-        "Transcription in progress",
-        "Wait for the upload to finish before leaving this screen."
-      );
-      return;
-    }
+    if (busy) return;
     onCancel();
   };
 
@@ -115,15 +137,27 @@ export default function TranscribeScreen({
         contentContainerStyle={s.content}
         keyboardShouldPersistTaps="handled"
       >
-        <TouchableOpacity onPress={cancel} style={s.back} disabled={busy}>
-          <Text style={s.backText}>‹  Library</Text>
-        </TouchableOpacity>
+        {/* Header row: back on the left, server settings button on the right */}
+        <View style={s.headerRow}>
+          <TouchableOpacity onPress={cancel} style={s.back} disabled={busy}>
+            <Text style={s.backText}>‹  Library</Text>
+          </TouchableOpacity>
 
-        <Text style={s.eyebrow}>AUDIO TRANSCRIPTION</Text>
-        <Text style={s.heading}>Turn a recording into notes</Text>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Configure transcription server"
+            style={s.serverButton}
+            onPress={openServerModal}
+            disabled={busy}
+          >
+            <Text style={s.serverButtonText}>⚙ Server</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={s.heading}>Import audio</Text>
         <Text style={s.description}>
-          Upload an audio file and choose the main spoken language. Your
-          transcript will be saved to this device.
+          Choose a recording and transcribe it in English, Tagalog, Hiligaynon,
+          or mixed speech.
         </Text>
 
         <TouchableOpacity
@@ -146,6 +180,18 @@ export default function TranscribeScreen({
           <Text style={s.changeText}>{asset ? "Change" : "＋"}</Text>
         </TouchableOpacity>
 
+        {/* Transcript name sits above the language selection */}
+        <Text style={s.sectionLabel}>TRANSCRIPT NAME</Text>
+        <TextInput
+          accessibilityLabel="Transcript name"
+          style={s.input}
+          value={title}
+          onChangeText={setTitle}
+          placeholder="e.g. Biology lecture"
+          placeholderTextColor={c.subtle}
+          editable={!busy}
+        />
+
         <Text style={s.sectionLabel}>TRANSCRIPTION LANGUAGE</Text>
         <View style={s.languageList}>
           {TRANSCRIPTION_LANGUAGES.map((item) => {
@@ -159,17 +205,10 @@ export default function TranscribeScreen({
                 disabled={busy}
                 style={[s.language, selected && s.languageSelected]}
               >
-                <View
-                  style={[s.radio, selected && s.radioSelected]}
-                >
+                <View style={[s.radio, selected && s.radioSelected]}>
                   {selected ? <View style={s.radioDot} /> : null}
                 </View>
-                <Text
-                  style={[
-                    s.languageLabel,
-                    selected && s.languageLabelSelected,
-                  ]}
-                >
+                <Text style={[s.languageLabel, selected && s.languageLabelSelected]}>
                   {item.label}
                 </Text>
                 <Text style={s.languageDetail}>{item.detail}</Text>
@@ -177,17 +216,6 @@ export default function TranscribeScreen({
             );
           })}
         </View>
-
-        <Text style={s.sectionLabel}>TRANSCRIPT NAME</Text>
-        <TextInput
-          accessibilityLabel="Transcript name"
-          style={s.input}
-          value={title}
-          onChangeText={setTitle}
-          placeholder="e.g. Biology lecture"
-          placeholderTextColor={c.subtle}
-          editable={!busy}
-        />
 
         {error ? (
           <View accessibilityRole="alert" style={s.errorBox}>
@@ -219,6 +247,54 @@ export default function TranscribeScreen({
           <Text style={s.progressText}>Uploading audio and transcribing…</Text>
         ) : null}
       </ScrollView>
+
+      {/* Server configuration card (modal) */}
+      <Modal
+        visible={serverModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setServerModalOpen(false)}
+      >
+        <View style={s.modalOverlay}>
+          <View style={s.modalCard}>
+            <Text style={s.modalTitle}>Transcription server</Text>
+            <Text style={s.modalHint}>
+              The server that receives the audio and returns the transcript.
+            </Text>
+            <TextInput
+              accessibilityLabel="Transcription server URL"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              style={s.input}
+              value={draftApiUrl}
+              onChangeText={setDraftApiUrl}
+              placeholder={DEFAULT_TRANSCRIPTION_API_URL}
+              placeholderTextColor={c.subtle}
+              editable={!busy}
+            />
+            <Text style={s.modalCurrent}>
+              Currently used: {apiUrl}
+            </Text>
+            <View style={s.modalButtons}>
+              <TouchableOpacity
+                style={[s.btn, s.grey]}
+                onPress={() => setServerModalOpen(false)}
+                disabled={busy}
+              >
+                <Text style={s.btnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.btn, s.primary]}
+                onPress={saveServerUrl}
+                disabled={busy}
+              >
+                <Text style={s.btnText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -227,67 +303,77 @@ function createStyles(c: ThemeColors) {
   return StyleSheet.create({
   screen: { flex: 1, backgroundColor: c.background },
   content: { paddingHorizontal: 20, paddingTop: 54, paddingBottom: 32 },
-  back: { alignSelf: "flex-start", paddingVertical: 8, marginBottom: 22 },
-  backText: { color: c.accent, fontSize: 15, fontWeight: "600" },
-  eyebrow: {
-    color: c.accent,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1.1,
-    marginBottom: 8,
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
   },
+  back: { paddingVertical: 8 },
+  backText: { color: c.accent, fontSize: 15, fontWeight: "600" },
+  serverButton: {
+    backgroundColor: c.surface,
+    borderColor: c.accentBorder,
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  serverButtonText: { color: c.accent, fontSize: 14, fontWeight: "600" },
   heading: { color: c.text, fontSize: 29, fontWeight: "700", lineHeight: 36 },
   description: {
     color: c.muted,
     fontSize: 15,
     lineHeight: 22,
     marginTop: 8,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   fileCard: {
     alignItems: "center",
     backgroundColor: c.surface,
     borderColor: c.border,
-    borderRadius: 22,
+    borderRadius: 18,
     borderWidth: 1,
     flexDirection: "row",
-    minHeight: 84,
+    minHeight: 64,
     paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingVertical: 12,
+    marginBottom: 16,
   },
   fileSelected: { borderColor: c.accentBorder },
   fileIcon: {
     alignItems: "center",
     backgroundColor: c.accentSurface,
-    borderRadius: 16,
-    height: 48,
+    borderRadius: 14,
+    height: 38,
     justifyContent: "center",
     marginRight: 12,
-    width: 48,
+    width: 38,
   },
-  fileIconText: { color: c.accent, fontSize: 23, fontWeight: "600" },
+  fileIconText: { color: c.accent, fontSize: 20, fontWeight: "600" },
   fileCopy: { flex: 1, minWidth: 0 },
-  fileTitle: { color: c.text, fontSize: 15, fontWeight: "600" },
-  fileMeta: { color: c.subtle, fontSize: 12, marginTop: 4 },
+  fileTitle: { color: c.text, fontSize: 15, fontWeight: "600", marginBottom: 2 },
+  fileMeta: { color: c.subtle, fontSize: 12 },
   changeText: { color: c.accent, fontSize: 14, fontWeight: "600", marginLeft: 8 },
   sectionLabel: {
     color: c.muted,
     fontSize: 11,
     fontWeight: "700",
-    letterSpacing: 0.8,
+    letterSpacing: 1,
     marginBottom: 10,
-    marginTop: 24,
+    marginTop: 20,
   },
-  languageList: { gap: 8 },
+  languageList: { gap: 0 },
   language: {
     alignItems: "center",
     backgroundColor: c.surface,
     borderColor: c.border,
-    borderRadius: 16,
     borderWidth: 1,
+    borderRadius: 16,
     flexDirection: "row",
-    minHeight: 54,
+    minHeight: 58,
     paddingHorizontal: 14,
+    marginBottom: 0,
   },
   languageSelected: { backgroundColor: c.accentSurface, borderColor: c.accentBorder },
   radio: {
@@ -304,7 +390,7 @@ function createStyles(c: ThemeColors) {
   radioDot: { backgroundColor: c.accent, borderRadius: 5, height: 10, width: 10 },
   languageLabel: { color: c.text, flex: 1, fontSize: 15, fontWeight: "500" },
   languageLabelSelected: { color: c.accentText, fontWeight: "600" },
-  languageDetail: { color: c.subtle, fontSize: 13 },
+  languageDetail: { color: c.subtle, fontSize: 13, marginLeft: 8, textAlign: "right" },
   input: {
     backgroundColor: c.surface,
     borderColor: c.border,
@@ -317,9 +403,10 @@ function createStyles(c: ThemeColors) {
   },
   errorBox: {
     backgroundColor: c.errorSurface,
-    borderRadius: 14,
-    marginTop: 16,
-    padding: 14,
+    borderRadius: 16,
+    marginTop: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   errorText: { color: c.errorText, fontSize: 14, lineHeight: 20 },
   privacyNote: { alignItems: "flex-start", flexDirection: "row", marginTop: 18 },
@@ -328,13 +415,47 @@ function createStyles(c: ThemeColors) {
   submit: {
     alignItems: "center",
     backgroundColor: c.accent,
-    borderRadius: 28,
+    borderRadius: 18,
     justifyContent: "center",
-    marginTop: 24,
-    minHeight: 54,
+    marginTop: 20,
+    minHeight: 56,
   },
   submitDisabled: { backgroundColor: "#9bbce8" },
-  submitText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  submitText: { color: "#fff", fontSize: 18, fontWeight: "600" },
   progressText: { color: c.muted, fontSize: 13, marginTop: 12, textAlign: "center" },
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: c.surface,
+    borderRadius: 24,
+    padding: 24,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 12,
+  },
+  modalTitle: { color: c.text, fontSize: 20, fontWeight: "700" },
+  modalHint: { color: c.muted, fontSize: 13, lineHeight: 19, marginTop: 6 },
+  modalCurrent: { color: c.subtle, fontSize: 12, marginTop: 10 },
+  modalButtons: { flexDirection: "row", gap: 10, marginTop: 20 },
+  btn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 48,
+  },
+  btnText: { color: "#fff", fontWeight: "600", fontSize: 16 },
+  grey: { backgroundColor: "#5f6368" },
+  primary: { backgroundColor: c.accent },
   });
 }

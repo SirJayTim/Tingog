@@ -12,6 +12,7 @@ import {
 import * as Clipboard from "expo-clipboard";
 import { Lecture, deleteLecture, getLecture, upsertLecture } from "./storage";
 import { getTheme, type ThemeColors } from "./theme";
+import { transcriptionLanguageLabel } from "./transcription";
 
 type Props = { id: string; isNightMode: boolean; onBack: () => void };
 
@@ -28,7 +29,7 @@ export default function DetailScreen({ id, isNightMode, onBack }: Props) {
       setTitle(l.title);
       setText(l.text);
     });
-  }, [id]);
+  }, [id, onBack]);
 
   if (!lecture) return null;
 
@@ -73,7 +74,8 @@ export default function DetailScreen({ id, isNightMode, onBack }: Props) {
       </TouchableOpacity>
       <TextInput style={s.title} value={title} onChangeText={setTitle} />
       <Text style={s.meta}>
-        {new Date(lecture.createdAt).toLocaleString()} · {lecture.lang}
+        {new Date(lecture.createdAt).toLocaleString()} ·{" "}
+        {transcriptionLanguageLabel(lecture.lang)}
       </Text>
       <ScrollView style={s.box} keyboardShouldPersistTaps="handled">
         <TextInput

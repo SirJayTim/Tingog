@@ -10,12 +10,18 @@
       "bundleIdentifier": "com.translate.tingog",
       "infoPlist": {
         "NSSpeechRecognitionUsageDescription": "Tingog needs speech recognition to write the transcript.",
-        "NSMicrophoneUsageDescription": "Tingog needs the microphone to hear the lecture."
+        "NSMicrophoneUsageDescription": "Tingog needs the microphone to hear the lecture.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true,
+          "NSAllowsLocalNetworking": true
+        }
       }
     },
     "android": {
       "package": "com.translate.tingog",
+      "usesCleartextTraffic": true,
       "permissions": [
+        "android.permission.INTERNET",
         "android.permission.RECORD_AUDIO"
       ]
     },

@@ -11,6 +11,10 @@ import {
   saveLang,
   saveNightMode,
 } from "./src/storage";
+import {
+  normalizeTranscriptionLanguage,
+  type TranscriptionLanguage,
+} from "./src/transcription";
 
 type Screen =
   | { name: "home"; key: number }
@@ -20,11 +24,11 @@ type Screen =
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>({ name: "home", key: 0 });
-  const [lang, setLang] = useState("fil-PH");
+  const [lang, setLang] = useState<TranscriptionLanguage>("mix");
   const [isNightMode, setIsNightMode] = useState(false);
 
   useEffect(() => {
-    loadLang().then(setLang);
+    loadLang().then((value) => setLang(normalizeTranscriptionLanguage(value)));
     loadNightMode()
       .then(setIsNightMode)
       .catch((error: unknown) => {
@@ -46,7 +50,7 @@ export default function App() {
     return () => sub.remove();
   }, [screen]);
 
-  const changeLang = (code: string) => {
+  const changeLang = (code: TranscriptionLanguage) => {
     setLang(code);
     saveLang(code);
   };

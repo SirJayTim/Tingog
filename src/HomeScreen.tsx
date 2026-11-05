@@ -9,18 +9,16 @@ import {
 } from "react-native";
 import { Lecture, loadLectures } from "./storage";
 import { getTheme, type ThemeColors } from "./theme";
-
-const LIVE_LANGS = [
-  { code: "fil-PH", label: "Tagalog" },
-  { code: "en-US", label: "English" },
-  { code: "en-PH", label: "English (PH)" },
-];
+import {
+  TRANSCRIPTION_LANGUAGES,
+  type TranscriptionLanguage,
+} from "./transcription";
 
 type Props = {
-  lang: string;
+  lang: TranscriptionLanguage;
   isNightMode: boolean;
   onToggleNightMode: () => void;
-  onLang: (code: string) => void;
+  onLang: (code: TranscriptionLanguage) => void;
   onOpen: (id: string) => void;
   onRecord: () => void;
   onUpload: () => void;
@@ -114,7 +112,7 @@ export default function HomeScreen({
             <View style={s.liveCard}>
               <Text style={s.sectionLabel}>LIVE SPEECH LANGUAGE</Text>
               <View style={s.langRow}>
-                {LIVE_LANGS.map((item) => {
+                {TRANSCRIPTION_LANGUAGES.map((item) => {
                   const active = lang === item.code;
                   return (
                     <TouchableOpacity
@@ -130,8 +128,8 @@ export default function HomeScreen({
                 })}
               </View>
               <Text style={s.hint}>
-                For Hiligaynon, upload a recording and select Hiligaynon for
-                server transcription.
+                Mixed sends the recording to your transcription server so a
+                lecture can include English, Tagalog, and Hiligaynon words.
               </Text>
             </View>
 
