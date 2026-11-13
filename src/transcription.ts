@@ -3,26 +3,57 @@ import {
   uploadAsync,
   FileSystemUploadType,
 } from "expo-file-system/legacy";
+import Constants from "expo-constants";
 import { loadApiUrl, saveApiUrl } from "./storage";
 
-export const DEFAULT_TRANSCRIPTION_API_URL = "http://192.168.1.11:8000";
+export const DEFAULT_TRANSCRIPTION_API_URL = "http://localhost:8000";
 
 function normalizeApiUrl(value: string): string {
   return value.trim().replace(/\/+$/, "");
 }
 
+function developmentHostIpv4(): string {
+  if (!__DEV__) return "";
+
+  const hostUri = Constants.expoConfig?.hostUri?.trim() ?? "";
+  const match =
+    /^(?:[a-z][a-z\d+.-]*:\/\/)?(\d{1,3}(?:\.\d{1,3}){3})(?::\d+)?(?:\/|$)/i.exec(
+      hostUri
+    );
+  if (!match) return "";
+
+  const octets = match[1].split(".").map(Number);
+  return octets.every((octet) => octet <= 255) ? match[1] : "";
+}
+
+function resolveDevelopmentHost(url: string): string {
+  const host = developmentHostIpv4();
+  if (!host) return url;
+
+  const parsed = /^(https?:\/\/)([^/?#]+)(.*)$/i.exec(url);
+  if (!parsed) return url;
+
+  const authority = parsed[2];
+  const credentialsEnd = authority.lastIndexOf("@");
+  const credentials =
+    credentialsEnd >= 0 ? authority.slice(0, credentialsEnd + 1) : "";
+  const hostAndPort =
+    credentialsEnd >= 0 ? authority.slice(credentialsEnd + 1) : authority;
+  const port = /:\d+$/.exec(hostAndPort)?.[0] ?? "";
+
+  return `${parsed[1]}${credentials}${host}${port}${parsed[3]}`;
+}
+
 function bundledEnvUrl(): string {
   const fromEnv = process.env.EXPO_PUBLIC_TRANSCRIPTION_API_URL?.trim() ?? "";
   if (!fromEnv) return "";
-  // Metro inlines this at start. Ignore a stale LAN IP that is not this PC.
-  if (fromEnv.includes("172.16.25.197")) return "";
   return normalizeApiUrl(fromEnv);
 }
 
 export async function getTranscriptionApiUrl(): Promise<string> {
   const saved = normalizeApiUrl(await loadApiUrl());
-  if (saved && !saved.includes("172.16.25.197")) return saved;
-  return bundledEnvUrl() || DEFAULT_TRANSCRIPTION_API_URL;
+  const configuredUrl = saved || bundledEnvUrl() || DEFAULT_TRANSCRIPTION_API_URL;
+  return resolveDevelopmentHost(configuredUrl);
 }
 
 export async function setTranscriptionApiUrl(url: string): Promise<string> {
@@ -127,23 +158,19 @@ function mimeTypeForName(name: string): string {
   }
 }
 
-export async function transcribeAudio(
+function extractDetail(status: number, data: TranscriptionResponse): string {
+  if (typeof data.detail === "string") return data.detail;
+  if (Array.isArray(data.detail)) return JSON.stringify(data.detail);
+  if (typeof data.text === "string") return data.text;
+  return "HTTP " + status;
+}
+
+async function uploadAudio(
+  endpoint: string,
   asset: DocumentPickerAsset,
   language: TranscriptionLanguage
-): Promise<TranscriptionResult> {
-  const baseUrl = await getTranscriptionApiUrl();
-  if (!baseUrl) {
-    throw new Error(
-      "Transcription is not configured. Enter the API URL on the import screen."
-    );
-  }
-
-  const endpoint = `${baseUrl}/transcribe`;
+): Promise<TranscriptionResponse> {
   const mime = asset.mimeType || mimeTypeForName(asset.name || "");
-
-  // Upload the file natively from disk as multipart/form-data.
-  // This avoids Blob/FormData incompatibilities entirely — the file bytes
-  // reach the server exactly as they exist on disk.
   let uploadResult: { status: number; body: string };
   try {
     uploadResult = await uploadAsync(endpoint, asset.uri, {
@@ -157,7 +184,10 @@ export async function transcribeAudio(
     const reason =
       error instanceof Error ? error.message : "Network request failed.";
     throw new Error(
-      `Could not reach ${endpoint}. The API must be running on this PC at that Wi‑Fi IP, and the phone must be on the same Wi‑Fi. ${reason}`
+      "Could not reach " +
+        endpoint +
+        ". The API must be running on this PC at that Wi-Fi IP, and the phone must be on the same Wi-Fi. " +
+        reason
     );
   }
 
@@ -169,22 +199,32 @@ export async function transcribeAudio(
     throw new Error(
       uploadResult.status >= 200 && uploadResult.status < 300
         ? "The transcription server returned an invalid response."
-        : `Transcription failed (${uploadResult.status}). ${body.slice(0, 240)}`
+        : "Transcription failed (" + uploadResult.status + "). " + body.slice(0, 240)
     );
   }
 
   if (uploadResult.status < 200 || uploadResult.status >= 300) {
-    // FastAPI validation errors come as an array: [{loc, msg, type}, ...]
-    const detail =
-      typeof data.detail === "string"
-        ? data.detail
-        : Array.isArray(data.detail)
-          ? JSON.stringify(data.detail)
-          : typeof data.text === "string"
-            ? data.text
-            : `HTTP ${uploadResult.status}`;
-    throw new Error(`Transcription failed: ${detail}`);
+    throw new Error(
+      "Transcription failed: " + extractDetail(uploadResult.status, data)
+    );
   }
+  return data;
+}
+
+export async function transcribeAudio(
+  asset: DocumentPickerAsset,
+  language: TranscriptionLanguage
+): Promise<TranscriptionResult> {
+  const baseUrl = await getTranscriptionApiUrl();
+  if (!baseUrl) {
+    throw new Error(
+      "Transcription is not configured. Enter the API URL on the import screen."
+    );
+  }
+
+  const endpoint = baseUrl + "/transcribe";
+
+  const data = await uploadAudio(endpoint, asset, language);
   if (typeof data.text !== "string" || !data.text.trim()) {
     throw new Error("The transcription server returned no transcript.");
   }
@@ -195,7 +235,6 @@ export async function transcribeAudio(
     data.duration_seconds > 0
       ? Math.round(data.duration_seconds)
       : 0;
-
   return { text: data.text.trim(), durationSec };
 }
 
@@ -206,7 +245,7 @@ export async function transcribeAudioUris(
   const parts: string[] = [];
   let durationSec = 0;
   for (const [index, uri] of uris.entries()) {
-    const name = uri.split("/").pop() || `recording-${index + 1}.wav`;
+    const name = uri.split("/").pop() || "recording-" + (index + 1) + ".wav";
     const result = await transcribeAudio({ uri, name }, language);
     if (result.text) parts.push(result.text);
     durationSec += result.durationSec;

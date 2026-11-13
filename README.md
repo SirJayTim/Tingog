@@ -64,16 +64,24 @@ inference endpoint to the public internet.
 
 ## 2. Point the Expo app at the API
 
-Copy `.env.example` to `.env` and set `EXPO_PUBLIC_TRANSCRIPTION_API_URL` to the
-API's base URL, with no `/transcribe` suffix:
+When developing with Expo on the same computer as the API, the app uses the
+IPv4 host from Expo's development server and the configured API port (default
+`8000`). Make sure the phone and computer are on the same Wi-Fi network and
+start the API with `--host 0.0.0.0` so the phone can reach it.
+
+For a different API port, copy `.env.example` to `.env` and set
+`EXPO_PUBLIC_TRANSCRIPTION_API_URL` to the API's base URL, with no
+`/transcribe` suffix:
 
 ```dotenv
-EXPO_PUBLIC_TRANSCRIPTION_API_URL=http://192.168.1.10:8000
+EXPO_PUBLIC_TRANSCRIPTION_API_URL=http://localhost:8000
 ```
 
-Replace the example IP with the computer's LAN IP when testing from a physical
-phone; `localhost` on the phone refers to the phone itself. Restart the Expo
-development server after changing `.env`.
+The development app replaces the URL host with Expo's detected IPv4 address
+while retaining the configured port. Restart Expo after changing `.env` or
+after switching networks. For installed production builds, configure
+`EXPO_PUBLIC_TRANSCRIPTION_API_URL` to the server's reachable deployed URL;
+local host detection is only available during development.
 
 The address is public app configuration, not a place for an API key or other
 secret. The client posts to `/transcribe`, saves the returned transcript

@@ -63,8 +63,8 @@ export default function TranscribeScreen({
 
   const saveServerUrl = async () => {
     try {
-      const normalized = await setTranscriptionApiUrl(draftApiUrl);
-      setApiUrl(normalized);
+      await setTranscriptionApiUrl(draftApiUrl);
+      setApiUrl(await getTranscriptionApiUrl());
       setServerModalOpen(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save the server URL.");
@@ -259,7 +259,8 @@ export default function TranscribeScreen({
           <View style={s.modalCard}>
             <Text style={s.modalTitle}>Transcription server</Text>
             <Text style={s.modalHint}>
-              The server that receives the audio and returns the transcript.
+              In development, Expo supplies the host IP automatically. The port
+              is taken from this URL.
             </Text>
             <TextInput
               accessibilityLabel="Transcription server URL"
@@ -423,7 +424,7 @@ function createStyles(c: ThemeColors) {
   submitDisabled: { backgroundColor: "#9bbce8" },
   submitText: { color: "#fff", fontSize: 18, fontWeight: "600" },
   progressText: { color: c.muted, fontSize: 13, marginTop: 12, textAlign: "center" },
-  overlay: {
+  modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
     alignItems: "center",
